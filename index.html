@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coliseum Night</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0a14; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Courier New', monospace; }
+canvas { display: block; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = 800;
+canvas.height = 600;
+
+let frame = 0;
+let fighters = [
+  { x: 250, y: 400, hp: 100, color: '#00ffff', name: 'Clawdine', swinging: false, swingFrame: 0 },
+  { x: 550, y: 400, hp: 100, color: '#ff0066', name: 'Opponent', swinging: false, swingFrame: 0 }
+];
+let crowdPulse = 0;
+let ringGlow = 0;
+
+function drawNeonRing() {
+  ringGlow = Math.sin(frame * 0.03) * 0.3 + 0.7;
+  
+  ctx.shadowBlur = 20 * ringGlow;
+  ctx.shadowColor = '#ff00aa';
+  ctx.strokeStyle = `rgba(255, 0, 170, ${ringGlow})`;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.ellipse(400, 420, 200, 80, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  ctx.shadowBlur = 10;
+  ctx.strokeStyle = `rgba(100, 0, 255, ${ringGlow * 0.5})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(400, 420, 210, 90, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  ctx.shadowBlur = 0;
+}
+
+function drawCrowd() {
+  crowdPulse = Math.sin(frame * 0.05) * 3;
+  for (let i = 0; i < 40; i++) {
+    let cx = 50 + i * 18;
+    let cy = 120 + Math.sin(frame * 0.02 + i * 0.5) * crowdPulse;
+    ctx.fillStyle = `hsl(${(frame * 2 + i * 30) % 360}, 60%, 40%)`;
+    ctx.fillRect(cx, cy, 8, 12);
+    ctx.fillRect(cx - 2, cy - 5, 12, 8);
+  }
+  for (let i = 0; i < 30; i++) {
+    let cx = 80 + i * 22;
+    let cy = 500 + Math.sin(frame * 0.03 + i * 0.7) * crowdPulse;
+    ctx.fillStyle = `hsl(${(frame * 2 + i * 40) % 360}, 50%, 35%)`;
+    ctx.fillRect(cx, cy, 8, 12);
+  }
+}
+
+function drawFighter(f) {
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = f.color;
+  
+  // Body
+  ctx.fillStyle = f.color;
+  ctx.fillRect(f.x - 15, f.y - 40, 30, 60);
+  
+  // Head
+  ctx.fillRect(f.x - 10, f.y - 55, 20, 15);
+  
+  // Eyes
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(f.x - 6, f.y - 52, 4, 4);
+  ctx.fillRect(f.x + 2, f.y - 52, 4, 4);
+  
+  if (f.swinging) {
+    // Swing arm
+    ctx.fillStyle = f.color;
+    let swingX = f.swingFrame < 10 ? f.x + 30 : f.x + 45 - (f.swingFrame - 10) * 2;
+    ctx.fillRect(swingX, f.y - 35, 25, 8);
+  }
+  
+  ctx.shadowBlur = 0;
+  
+  // HP bar
+  ctx.fillStyle = '#333';
+  ctx.fillRect(f.x - 30, f.y - 70, 60, 6);
+  ctx.fillStyle = f.hp > 30 ? f.color : '#ff0000';
+  ctx.fillRect(f.x - 30, f.y - 70, 60 * (f.hp / 100), 6);
+  
+  // Name
+  ctx.fillStyle = '#fff';
+  ctx.font = '10px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText(f.name, f.x, f.y - 75);
+}
+
+function drawLightning() {
+  if (frame % 120 < 5) {
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 + Math.random() * 0.4})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let lx = 100 + Math.random() * 600;
+    let ly = 0;
+    ctx.moveTo(lx, ly);
+    for (let i = 0; i < 8; i++) {
+      lx += (Math.random() - 0.5) * 40;
+      ly += 30 + Math.random() * 20;
+      ctx.lineTo(lx, ly);
+    }
+    ctx.stroke();
+  }
+}
+
+function drawTitle() {
+  if (frame < 180) {
+    let alpha = frame < 120 ? 1 : 1 - (frame - 120) / 60;
+    ctx.fillStyle = `rgba(255, 0, 170, ${alpha})`;
+    ctx.font = 'bold 48px Courier New';
+    ctx.textAlign = 'center';
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = '#ff00aa';
+    ctx.fillText('COLISEUM NIGHT', 400, 250);
+    
+    ctx.font = '16px Courier New';
+    ctx.fillStyle = `rgba(0, 255, 255, ${alpha * 0.7})`;
+    ctx.fillText('Press SPACE to fight', 400, 300);
+    ctx.shadowBlur = 0;
+  }
+}
+
+let gameState = 'title';
+let damageFlash = 0;
+
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && gameState === 'title') {
+    gameState = 'fighting';
+    e.preventDefault();
+  }
+  if (gameState === 'fighting') {
+    if (e.code === 'KeyZ' || e.code === 'KeyX') {
+      let attacker = fighters[e.code === 'KeyZ' ? 0 : 1];
+      let defender = fighters[e.code === 'KeyZ' ? 1 : 0];
+      attacker.swinging = true;
+      attacker.swingFrame = 0;
+      
+      if (frame % 20 === 0) {
+        let damage = Math.floor(Math.random() * 8) + 3;
+        defender.hp = Math.max(0, defender.hp - damage);
+        damageFlash = 10;
+      }
+      
+      if (defender.hp <= 0) {
+        gameState = 'gameOver';
+      }
+    }
+    e.preventDefault();
+  }
+  if (gameState === 'gameOver' && e.code === 'Space') {
+    fighters[0].hp = 100;
+    fighters[1].hp = 100;
+    gameState = 'title';
+    e.preventDefault();
+  }
+});
+
+function animate() {
+  frame++;
+  
+  // Background
+  let grad = ctx.createLinearGradient(0, 0, 0, 600);
+  grad.addColorStop(0, '#050510');
+  grad.addColorStop(0.5, '#0a0a20');
+  grad.addColorStop(1, '#15102a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 800, 600);
+  
+  // Neon lights streaking
+  if (frame % 15 === 0) {
+    ctx.strokeStyle = `hsla(${frame * 3 % 360}, 80%, 50%, 0.15)`;
+    ctx.lineWidth = 1;
+    let sx = Math.random() * 800;
+    ctx.beginPath();
+    ctx.moveTo(sx, 0);
+    ctx.lineTo(sx + (Math.random() - 0.5) * 50, 600);
+    ctx.stroke();
+  }
+  
+  drawCrowd();
+  drawNeonRing();
+  drawLightning();
+  
+  if (gameState === 'fighting') {
+    fighters.forEach(f => {
+      if (f.swinging) f.swingFrame++;
+      if (f.swingFrame > 20) f.swinging = false;
+      drawFighter(f);
+    });
+    
+    // VS text
+    ctx.fillStyle = '#ffcc00';
+    ctx.font = 'bold 14px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚡ VS ⚡', 400, 350);
+    
+    // Controls
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '11px Courier New';
+    ctx.fillText('Z = Clawdine strikes | X = Opponent strikes', 400, 580);
+  }
+  
+  if (gameState === 'gameOver') {
+    let winner = fighters[0].hp > 0 ? fighters[0] : fighters[1];
+    ctx.fillStyle = winner.color;
+    ctx.font = 'bold 36px Courier New';
+    ctx.textAlign = 'center';
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = winner.color;
+    ctx.fillText(winner.name + ' WINS', 400, 280);
+    ctx.shadowBlur = 0;
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px Courier New';
+    ctx.fillText('Press SPACE to rematch', 400, 330);
+    
+    fighters.forEach(f => drawFighter(f));
+  }
+  
+  if (damageFlash > 0) {
+    ctx.fillStyle = `rgba(255, 0, 0, ${damageFlash * 0.03})`;
+    ctx.fillRect(0, 0, 800, 600);
+    damageFlash--;
+  }
+  
+  drawTitle();
+  
+  requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+</body>
+</html>
